@@ -19,6 +19,16 @@
       line-height: 22px;
     }
 
+    #editor::placeholder {
+      color: #94a3b8;
+      opacity: 1;
+    }
+
+    #highlight-layer {
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+    }
+
     /* Synchronized scrolling line numbers */
     .line-numbers {
       counter-reset: line-counter;
@@ -27,7 +37,14 @@
 
     /* Custom highlight for search hits */
     mark.match-active {
-      background-color: #fde047;
+      background-color: #facc15;
+      color: #000;
+      border-radius: 2px;
+      box-shadow: 0 0 0 1px #eab308;
+    }
+
+    mark.match-found {
+      background-color: #fef08a;
       color: #000;
       border-radius: 2px;
     }
@@ -125,7 +142,11 @@
     <div class="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded px-2 py-1">
       <i class="fa-solid fa-magnifying-glass text-slate-400"></i>
       <input type="text" id="find-query" placeholder="Find text..." oninput="executeSearch()" class="bg-transparent focus:outline-none text-slate-700 w-44 editor-font" />
-      <span id="find-counter" class="text-[11px] text-slate-400 font-mono">0 / 0</span>
+      <span id="find-counter" class="text-[11px] text-slate-400 font-mono">0 matches</span>
+    </div>
+    <div class="flex items-center gap-1">
+      <button onclick="navigateMatch(-1)" title="Previous match" class="px-2 py-1 rounded border border-slate-300 hover:bg-slate-100">Prev</button>
+      <button onclick="navigateMatch(1)" title="Next match" class="px-2 py-1 rounded border border-slate-300 hover:bg-slate-100">Next</button>
     </div>
 
     <!-- Options -->
@@ -172,13 +193,14 @@
 
     <!-- Main Clean White Typing Screen -->
     <div class="flex-1 relative overflow-hidden">
+      <div id="highlight-layer" aria-hidden="true" class="absolute inset-0 p-3 pt-3 text-slate-800 editor-font overflow-hidden pointer-events-none"></div>
       <textarea id="editor" spellcheck="false" placeholder="Start typing your text here..." 
         onbeforeinput="captureUndoState(event)"
         oninput="handleEditorInput()" 
         onscroll="syncScroll()" 
         onkeyup="updateCursorPosition()" 
         onclick="updateCursorPosition()"
-        class="w-full h-full p-3 pt-3 bg-white text-slate-800 editor-font resize-none focus:outline-none overflow-y-auto leading-[22px]"></textarea>
+        class="relative z-10 w-full h-full p-3 pt-3 bg-transparent text-transparent caret-slate-800 editor-font resize-none focus:outline-none overflow-y-auto leading-[22px] selection:bg-blue-200 selection:text-transparent"></textarea>
     </div>
   </main>
 
@@ -192,8 +214,6 @@
       <span><strong class="text-slate-800">Characters:</strong> <span id="stat-chars">0</span></span>
     </div>
     <div class="flex items-center gap-3 text-[11px] text-slate-500">
-      <span id="algo-indicator">Algorithm: Boyer-Moore</span>
-      <span>|</span>
       <span>UTF-8</span>
     </div>
   </footer>
@@ -370,6 +390,7 @@
 
     const editor = document.getElementById('editor');
     const gutter = document.getElementById('gutter');
+    const highlightLayer = document.getElementById('highlight-layer');
     const docLines = new DoublyLinkedList();
     const undoStack = new CircularStack(100);
     const redoStack = new CircularStack(100);
@@ -388,6 +409,7 @@
       syncDocumentFromTextarea(false);
       updateLineNumbers();
       updateStats();
+      renderSearchHighlights();
     }
 
     // Synchronize textarea text with Doubly Linked List
@@ -414,6 +436,8 @@
     // Keep line numbers scrolled in sync with the textarea
     function syncScroll() {
       gutter.scrollTop = editor.scrollTop;
+      highlightLayer.scrollTop = editor.scrollTop;
+      highlightLayer.scrollLeft = editor.scrollLeft;
     }
 
     // Save the pre-edit state before the browser changes the textarea value.
@@ -430,6 +454,10 @@
       updateStats();
       if (!document.getElementById('find-toolbar').classList.contains('hidden')) {
         executeSearch();
+      } else {
+        searchMatches = [];
+        currentMatchIndex = -1;
+        renderSearchHighlights();
       }
     }
 
@@ -468,6 +496,8 @@
       docLines.fromArray(previous.text.split('\n'));
       updateLineNumbers();
       updateStats();
+      if (!document.getElementById('find-toolbar').classList.contains('hidden')) executeSearch();
+      else renderSearchHighlights();
       updateUndoButtons();
     }
 
@@ -483,6 +513,8 @@
       docLines.fromArray(nextState.text.split('\n'));
       updateLineNumbers();
       updateStats();
+      if (!document.getElementById('find-toolbar').classList.contains('hidden')) executeSearch();
+      else renderSearchHighlights();
       updateUndoButtons();
     }
 
@@ -501,13 +533,15 @@
       if (!bar.classList.contains('hidden')) {
         document.getElementById('find-query').focus();
         executeSearch();
+      } else {
+        searchMatches = [];
+        currentMatchIndex = -1;
+        renderSearchHighlights();
       }
     }
 
     function onAlgoChange() {
       activeAlgorithm = document.getElementById('algo-select').value;
-      document.getElementById('algo-indicator').innerText = 
-        activeAlgorithm === 'KMP' ? 'Algorithm: KMP (Prefix-Shift)' : 'Algorithm: Boyer-Moore';
       executeSearch();
     }
 
@@ -521,7 +555,8 @@
       currentMatchIndex = -1;
 
       if (!query) {
-        counter.innerText = '0 / 0';
+        counter.innerText = '0 matches';
+        renderSearchHighlights();
         return;
       }
 
@@ -550,16 +585,51 @@
 
       if (searchMatches.length > 0) {
         currentMatchIndex = 0;
-        counter.innerText = `1 / ${searchMatches.length}`;
-        highlightMatch(searchMatches[0], query.length);
+        counter.innerText = `${searchMatches.length} match${searchMatches.length === 1 ? '' : 'es'}`;
       } else {
-        counter.innerText = '0 / 0';
+        counter.innerText = '0 matches';
       }
+      renderSearchHighlights();
     }
 
-    function highlightMatch(startIndex, length) {
+    function escapeHtml(text) {
+      return text.replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[ch]);
+    }
+
+    function renderSearchHighlights() {
+      const text = editor.value;
+      const queryLength = document.getElementById('find-query').value.length;
+      let html = '';
+      let cursor = 0;
+      for (let i = 0; i < searchMatches.length; i++) {
+        const start = searchMatches[i];
+        if (start < cursor) continue;
+        html += escapeHtml(text.slice(cursor, start));
+        const cls = i === currentMatchIndex ? 'match-active' : 'match-found';
+        html += `<mark class="${cls}">${escapeHtml(text.slice(start, start + queryLength))}</mark>`;
+        cursor = start + queryLength;
+      }
+      html += escapeHtml(text.slice(cursor));
+      if (text.endsWith('\n')) html += ' ';
+      highlightLayer.innerHTML = html;
+      highlightLayer.scrollTop = editor.scrollTop;
+      highlightLayer.scrollLeft = editor.scrollLeft;
+    }
+
+    // Searching leaves focus and caret in place. Jump only when the user
+    // explicitly selects a result with Prev or Next.
+    function navigateMatch(direction) {
+      if (searchMatches.length === 0) return;
+      currentMatchIndex = (currentMatchIndex + direction + searchMatches.length) % searchMatches.length;
+      const startIndex = searchMatches[currentMatchIndex];
       editor.focus();
-      editor.setSelectionRange(startIndex, startIndex + length);
+      // A range selection paints over the overlay highlight. Move only the
+      // caret to the match so the active result stays visibly highlighted.
+      editor.setSelectionRange(startIndex, startIndex);
+      renderSearchHighlights();
+      updateCursorPosition();
     }
 
     function replaceNextMatch() {
@@ -625,6 +695,9 @@
       redoStack.clear();
       updateUndoButtons();
       syncDocumentFromTextarea(false);
+      searchMatches = [];
+      currentMatchIndex = -1;
+      renderSearchHighlights();
       currentFileName = "Untitled.txt";
       document.getElementById('window-title').innerText = `${currentFileName} - Notepad`;
     }
@@ -641,6 +714,9 @@
         redoStack.clear();
         updateUndoButtons();
         syncDocumentFromTextarea(false);
+        searchMatches = [];
+        currentMatchIndex = -1;
+        renderSearchHighlights();
         currentFileName = file.name;
         document.getElementById('window-title').innerText = `${currentFileName} - Notepad`;
       };
