@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notepad - Text Editor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Consolas&family=Segoe+UI:wght@400;500;600&display=swap');
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .editor-font {
+      font-family: 'Consolas', 'Courier New', Courier, monospace;
+      font-size: 14px;
+      line-height: 22px;
+    }
+
+    /* Synchronized scrolling line numbers */
+    .line-numbers {
+      counter-reset: line-counter;
+      user-select: none;
+    }
+
+    /* Custom highlight for search hits */
+    mark.match-active {
+      background-color: #fde047;
+      color: #000;
+      border-radius: 2px;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 5px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 flex flex-col h-screen overflow-hidden select-none">
+
+  <!-- ================= WINDOW HEADER / TITLEBAR ================= -->
+  <header class="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between shadow-sm">
+    <div class="flex items-center space-x-2">
+      <i class="fa-regular fa-note-sticky text-blue-600 text-lg"></i>
+      <span id="window-title" class="font-medium text-sm text-slate-700">Untitled.txt</span>
+    </div>
+    <div class="flex items-center space-x-2 text-xs text-slate-500">
+      <span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium border border-blue-200">Notepad</span>
+    </div>
+  </header>
+
+  <!-- ================= TOOLBAR RIBBON ================= -->
+  <div class="bg-slate-50 border-b border-slate-200 px-3 py-1.5 flex items-center justify-between text-xs text-slate-700">
+    <div class="flex items-center space-x-1">
+      <!-- File Operations -->
+      <button onclick="newFile()" title="New Document (Ctrl+N)" class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 active:bg-slate-300 transition">
+        <i class="fa-regular fa-file text-slate-600"></i>
+        <span>New</span>
+      </button>
+
+      <label title="Open File" class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 active:bg-slate-300 transition cursor-pointer">
+        <i class="fa-regular fa-folder-open text-amber-600"></i>
+        <span>Open</span>
+        <input type="file" id="file-loader" accept=".txt" class="hidden" onchange="loadFile(event)" />
+      </label>
+
+      <button onclick="saveFile()" title="Save as .txt (Ctrl+S)" class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 active:bg-slate-300 transition">
+        <i class="fa-regular fa-floppy-disk text-emerald-600"></i>
+        <span>Save</span>
+      </button>
+
+      <button onclick="exportPDF()" title="Export PDF" class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 active:bg-slate-300 transition">
+        <i class="fa-solid fa-file-pdf text-red-500"></i>
+        <span>PDF</span>
+      </button>
+
+      <div class="w-px h-5 bg-slate-300 mx-1"></div>
+
+      <!-- Undo / Redo Operations -->
+      <button id="btn-undo" onclick="performUndo()" title="Undo (Ctrl+Z)" disabled class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 disabled:opacity-40 disabled:hover:bg-transparent transition">
+        <i class="fa-solid fa-rotate-left text-slate-600"></i>
+        <span>Undo</span>
+      </button>
+
+      <button id="btn-redo" onclick="performRedo()" title="Redo (Ctrl+Y)" disabled class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 disabled:opacity-40 disabled:hover:bg-transparent transition">
+        <i class="fa-solid fa-rotate-right text-slate-600"></i>
+        <span>Redo</span>
+      </button>
+
+      <div class="w-px h-5 bg-slate-300 mx-1"></div>
+
+      <!-- Find & Replace Toggle -->
+      <button onclick="toggleFindBar()" title="Find & Replace (Ctrl+F)" class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 active:bg-slate-300 transition">
+        <i class="fa-solid fa-magnifying-glass text-blue-600"></i>
+        <span>Find & Replace</span>
+      </button>
+    </div>
+
+    <!-- Quick Algorithm Indicator Badge -->
+    <div class="flex items-center gap-2">
+      <span class="text-[11px] text-slate-500">Search Algorithm:</span>
+      <select id="algo-select" onchange="onAlgoChange()" class="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-blue-500">
+        <option value="BM">Boyer-Moore (Fastest)</option>
+        <option value="KMP">KMP (Prefix-Shift)</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ================= FIND & REPLACE DOCKED TOOLBAR ================= -->
+  <div id="find-toolbar" class="hidden bg-white border-b border-slate-200 px-4 py-2 text-xs shadow-sm flex flex-wrap items-center gap-3">
+    <!-- Find Input -->
+    <div class="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded px-2 py-1">
+      <i class="fa-solid fa-magnifying-glass text-slate-400"></i>
+      <input type="text" id="find-query" placeholder="Find text..." oninput="executeSearch()" class="bg-transparent focus:outline-none text-slate-700 w-44 editor-font" />
+      <span id="find-counter" class="text-[11px] text-slate-400 font-mono">0 / 0</span>
+    </div>
+
+    <!-- Options -->
+    <div class="flex items-center gap-3 text-slate-600">
+      <label class="flex items-center gap-1 cursor-pointer select-none">
+        <input type="checkbox" id="find-case" onchange="executeSearch()" class="rounded text-blue-600" />
+        <span>Match Case</span>
+      </label>
+      <label class="flex items-center gap-1 cursor-pointer select-none">
+        <input type="checkbox" id="find-word" onchange="executeSearch()" class="rounded text-blue-600" />
+        <span>Whole Word</span>
+      </label>
+    </div>
+
+    <div class="w-px h-5 bg-slate-300"></div>
+
+    <!-- Replace Input & Buttons -->
+    <div class="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded px-2 py-1">
+      <i class="fa-solid fa-arrows-rotate text-slate-400"></i>
+      <input type="text" id="replace-query" placeholder="Replace with..." class="bg-transparent focus:outline-none text-slate-700 w-36 editor-font" />
+    </div>
+
+    <div class="flex items-center gap-1">
+      <button onclick="replaceNextMatch()" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-slate-700 transition">
+        Replace
+      </button>
+      <button onclick="replaceAllMatches()" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded transition font-medium">
+        Replace All
+      </button>
+    </div>
+
+    <button onclick="toggleFindBar()" class="ml-auto text-slate-400 hover:text-slate-600 p-1">
+      <i class="fa-solid fa-xmark text-sm"></i>
+    </button>
+  </div>
+
+  <!-- ================= NOTEPAD TYPING CANVAS ================= -->
+  <main class="flex-1 flex bg-white overflow-hidden relative">
+    
+    <!-- Line Numbers Gutter -->
+    <div id="gutter" class="w-12 bg-slate-50 border-r border-slate-200 text-slate-400 editor-font text-right pr-2 pt-3 select-none overflow-hidden shrink-0">
+      <div>1</div>
+    </div>
+
+    <!-- Main Clean White Typing Screen -->
+    <div class="flex-1 relative overflow-hidden">
+      <textarea id="editor" spellcheck="false" placeholder="Start typing your text here..." 
+        onbeforeinput="captureUndoState(event)"
+        oninput="handleEditorInput()" 
+        onscroll="syncScroll()" 
+        onkeyup="updateCursorPosition()" 
+        onclick="updateCursorPosition()"
+        class="w-full h-full p-3 pt-3 bg-white text-slate-800 editor-font resize-none focus:outline-none overflow-y-auto leading-[22px]"></textarea>
+    </div>
+  </main>
+
+  <!-- ================= BOTTOM STATUS BAR ================= -->
+  <footer class="bg-slate-100 border-t border-slate-200 px-4 py-1 flex items-center justify-between text-xs text-slate-600 select-none">
+    <div class="flex items-center gap-4">
+      <span><strong class="text-slate-800">Ln:</strong> <span id="stat-line">1</span>, <strong class="text-slate-800">Col:</strong> <span id="stat-col">1</span></span>
+      <span class="text-slate-300">|</span>
+      <span><strong class="text-slate-800">Lines:</strong> <span id="stat-lines-total">1</span></span>
+      <span><strong class="text-slate-800">Words:</strong> <span id="stat-words">0</span></span>
+      <span><strong class="text-slate-800">Characters:</strong> <span id="stat-chars">0</span></span>
+    </div>
+    <div class="flex items-center gap-3 text-[11px] text-slate-500">
+      <span id="algo-indicator">Algorithm: Boyer-Moore</span>
+      <span>|</span>
+      <span>UTF-8</span>
+    </div>
+  </footer>
+
+  <!-- ================= APPLICATION ENGINE SCRIPT ================= -->
+  <script>
+    // -------------------------------------------------------------------------
+    // 1. DATA STRUCTURES: DOUBLY LINKED LIST & CIRCULAR STACK
+    // -------------------------------------------------------------------------
+
+    class LineNode {
+      constructor(text) {
+        this.text = text;
+        this.prev = null;
+        this.next = null;
+      }
+    }
+
+    class DoublyLinkedList {
+      constructor() {
+        this.head = null;
+        this.tail = null;
+        this.size = 0;
+      }
+
+      clear() {
+        this.head = null;
+        this.tail = null;
+        this.size = 0;
+      }
+
+      insertAtEnd(text) {
+        const node = new LineNode(text);
+        if (!this.tail) {
+          this.head = this.tail = node;
+        } else {
+          this.tail.next = node;
+          node.prev = this.tail;
+          this.tail = node;
+        }
+        this.size++;
+        return node;
+      }
+
+      fromArray(lines) {
+        this.clear();
+        for (const line of lines) {
+          this.insertAtEnd(line);
+        }
+      }
+
+      toArray() {
+        const arr = [];
+        let curr = this.head;
+        while (curr) {
+          arr.push(curr.text);
+          curr = curr.next;
+        }
+        return arr;
+      }
+    }
+
+    // Circular Ring-Buffer Stack (Maximum 100 history items)
+    class CircularStack {
+      constructor(capacity = 100) {
+        this.capacity = capacity;
+        this.data = new Array(capacity);
+        this.count = 0;
+        this.topIndex = -1;
+        this.bottomIndex = 0;
+      }
+
+      push(item) {
+        if (this.count === this.capacity) {
+          this.bottomIndex = (this.bottomIndex + 1) % this.capacity;
+          this.topIndex = (this.topIndex + 1) % this.capacity;
+          this.data[this.topIndex] = item;
+        } else {
+          this.topIndex = (this.topIndex + 1) % this.capacity;
+          this.data[this.topIndex] = item;
+          this.count++;
+        }
+      }
+
+      pop() {
+        if (this.count === 0) return null;
+        const item = this.data[this.topIndex];
+        this.topIndex = (this.topIndex - 1 + this.capacity) % this.capacity;
+        this.count--;
+        return item;
+      }
+
+      empty() { return this.count === 0; }
+      clear() {
+        this.count = 0;
+        this.topIndex = -1;
+        this.bottomIndex = 0;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. SEARCH ALGORITHMS: KMP & BOYER-MOORE
+    // -------------------------------------------------------------------------
+
+    // Knuth-Morris-Pratt Search
+    function kmpSearch(text, pattern) {
+      const matches = [];
+      const m = pattern.length;
+      const n = text.length;
+      if (m === 0 || n < m) return matches;
+
+      // Compute LPS table
+      const lps = new Array(m).fill(0);
+      let len = 0, i = 1;
+      while (i < m) {
+        if (pattern[i] === pattern[len]) {
+          len++;
+          lps[i++] = len;
+        } else if (len !== 0) {
+          len = lps[len - 1];
+        } else {
+          lps[i++] = 0;
+        }
+      }
+
+      // Scan text
+      i = 0;
+      let j = 0;
+      while (i < n) {
+        if (pattern[j] === text[i]) {
+          i++;
+          j++;
+        }
+        if (j === m) {
+          matches.push(i - m);
+          j = lps[j - 1];
+        } else if (i < n && pattern[j] !== text[i]) {
+          if (j !== 0) j = lps[j - 1];
+          else i++;
+        }
+      }
+      return matches;
+    }
+
+    // Boyer-Moore Search (Bad Character heuristic)
+    function boyerMooreSearch(text, pattern) {
+      const matches = [];
+      const m = pattern.length;
+      const n = text.length;
+      if (m === 0 || n < m) return matches;
+
+      const badChar = {};
+      for (let i = 0; i < m; i++) badChar[pattern[i]] = i;
+
+      let s = 0;
+      while (s <= n - m) {
+        let j = m - 1;
+        while (j >= 0 && pattern[j] === text[s + j]) j--;
+
+        if (j < 0) {
+          matches.push(s);
+          s += (s + m < n) ? m - (badChar[text[s + m]] !== undefined ? badChar[text[s + m]] : -1) : 1;
+        } else {
+          const badCharShift = j - (badChar[text[s + j]] !== undefined ? badChar[text[s + j]] : -1);
+          s += Math.max(1, badCharShift);
+        }
+      }
+      return matches;
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. EDITOR STATE & EVENT HANDLERS
+    // -------------------------------------------------------------------------
+
+    const editor = document.getElementById('editor');
+    const gutter = document.getElementById('gutter');
+    const docLines = new DoublyLinkedList();
+    const undoStack = new CircularStack(100);
+    const redoStack = new CircularStack(100);
+
+    let currentFileName = "Untitled.txt";
+    let activeAlgorithm = "BM";
+    let lastSavedContent = "";
+    let searchMatches = [];
+    let currentMatchIndex = -1;
+
+    // Initialize initial text
+    function initEditor() {
+      const initial = "Welcome to Text Editor\nThis is my first saved file.\nFile handling is working.";
+      editor.value = initial;
+      lastSavedContent = initial;
+      syncDocumentFromTextarea(false);
+      updateLineNumbers();
+      updateStats();
+    }
+
+    // Synchronize textarea text with Doubly Linked List
+    function syncDocumentFromTextarea() {
+      const text = editor.value;
+      const lines = text.split('\n');
+      docLines.fromArray(lines);
+      updateLineNumbers();
+      updateStats();
+    }
+
+    // Synchronize gutter line numbers
+    function updateLineNumbers() {
+      const lines = editor.value.split('\n');
+      const count = lines.length;
+      let gutterHTML = '';
+      for (let i = 1; i <= count; i++) {
+        gutterHTML += `<div>${i}</div>`;
+      }
+      gutter.innerHTML = gutterHTML;
+      document.getElementById('stat-lines-total').innerText = count;
+    }
+
+    // Keep line numbers scrolled in sync with the textarea
+    function syncScroll() {
+      gutter.scrollTop = editor.scrollTop;
+    }
+
+    // Save the pre-edit state before the browser changes the textarea value.
+    function captureUndoState(event) {
+      if (event.inputType && event.inputType.startsWith('history')) return;
+      undoStack.push({ text: editor.value });
+      redoStack.clear();
+      updateUndoButtons();
+    }
+
+    function handleEditorInput() {
+      syncDocumentFromTextarea();
+      updateLineNumbers();
+      updateStats();
+      if (!document.getElementById('find-toolbar').classList.contains('hidden')) {
+        executeSearch();
+      }
+    }
+
+    // Update cursor line and column numbers
+    function updateCursorPosition() {
+      const pos = editor.selectionStart;
+      const textBefore = editor.value.substring(0, pos);
+      const lines = textBefore.split('\n');
+      const lineNum = lines.length;
+      const colNum = lines[lines.length - 1].length + 1;
+
+      document.getElementById('stat-line').innerText = lineNum;
+      document.getElementById('stat-col').innerText = colNum;
+    }
+
+    // Document Statistics
+    function updateStats() {
+      const text = editor.value;
+      const chars = text.length;
+      const words = text.trim() ? (text.trim().match(/\b\w+\b/g) || []).length : 0;
+
+      document.getElementById('stat-chars').innerText = chars;
+      document.getElementById('stat-words').innerText = words;
+    }
+
+    // Undo & Redo
+    function performUndo() {
+      if (undoStack.empty()) return;
+
+      const current = { text: editor.value };
+      redoStack.push(current);
+
+      const previous = undoStack.pop();
+      editor.value = previous.text;
+
+      docLines.fromArray(previous.text.split('\n'));
+      updateLineNumbers();
+      updateStats();
+      updateUndoButtons();
+    }
+
+    function performRedo() {
+      if (redoStack.empty()) return;
+
+      const current = { text: editor.value };
+      undoStack.push(current);
+
+      const nextState = redoStack.pop();
+      editor.value = nextState.text;
+
+      docLines.fromArray(nextState.text.split('\n'));
+      updateLineNumbers();
+      updateStats();
+      updateUndoButtons();
+    }
+
+    function updateUndoButtons() {
+      document.getElementById('btn-undo').disabled = undoStack.empty();
+      document.getElementById('btn-redo').disabled = redoStack.empty();
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. FIND & REPLACE LOGIC
+    // -------------------------------------------------------------------------
+
+    function toggleFindBar() {
+      const bar = document.getElementById('find-toolbar');
+      bar.classList.toggle('hidden');
+      if (!bar.classList.contains('hidden')) {
+        document.getElementById('find-query').focus();
+        executeSearch();
+      }
+    }
+
+    function onAlgoChange() {
+      activeAlgorithm = document.getElementById('algo-select').value;
+      document.getElementById('algo-indicator').innerText = 
+        activeAlgorithm === 'KMP' ? 'Algorithm: KMP (Prefix-Shift)' : 'Algorithm: Boyer-Moore';
+      executeSearch();
+    }
+
+    function executeSearch() {
+      const query = document.getElementById('find-query').value;
+      const matchCase = document.getElementById('find-case').checked;
+      const matchWord = document.getElementById('find-word').checked;
+      const counter = document.getElementById('find-counter');
+
+      searchMatches = [];
+      currentMatchIndex = -1;
+
+      if (!query) {
+        counter.innerText = '0 / 0';
+        return;
+      }
+
+      let text = editor.value;
+      let pattern = query;
+
+      if (!matchCase) {
+        text = text.toLowerCase();
+        pattern = pattern.toLowerCase();
+      }
+
+      let rawMatches = (activeAlgorithm === 'KMP') 
+        ? kmpSearch(text, pattern) 
+        : boyerMooreSearch(text, pattern);
+
+      if (matchWord) {
+        const fullText = editor.value;
+        rawMatches = rawMatches.filter(idx => {
+          const before = idx > 0 ? fullText[idx - 1] : ' ';
+          const after = (idx + query.length < fullText.length) ? fullText[idx + query.length] : ' ';
+          return !/\w/.test(before) && !/\w/.test(after);
+        });
+      }
+
+      searchMatches = rawMatches;
+
+      if (searchMatches.length > 0) {
+        currentMatchIndex = 0;
+        counter.innerText = `1 / ${searchMatches.length}`;
+        highlightMatch(searchMatches[0], query.length);
+      } else {
+        counter.innerText = '0 / 0';
+      }
+    }
+
+    function highlightMatch(startIndex, length) {
+      editor.focus();
+      editor.setSelectionRange(startIndex, startIndex + length);
+    }
+
+    function replaceNextMatch() {
+      const query = document.getElementById('find-query').value;
+      const replacement = document.getElementById('replace-query').value;
+      if (!query || searchMatches.length === 0) return;
+
+      const idx = searchMatches[currentMatchIndex];
+      const text = editor.value;
+      const newText = text.substring(0, idx) + replacement + text.substring(idx + query.length);
+
+      undoStack.push({ text: text });
+      redoStack.clear();
+      updateUndoButtons();
+
+      editor.value = newText;
+      docLines.fromArray(newText.split('\n'));
+      updateLineNumbers();
+      updateStats();
+      executeSearch();
+    }
+
+    function replaceAllMatches() {
+      const query = document.getElementById('find-query').value;
+      const replacement = document.getElementById('replace-query').value;
+      if (!query || searchMatches.length === 0) return;
+
+      const text = editor.value;
+      const matchCase = document.getElementById('find-case').checked;
+      const flags = matchCase ? 'g' : 'gi';
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const matchWord = document.getElementById('find-word').checked;
+      const regex = matchWord
+        ? new RegExp(`(^|[^\\w])(${escaped})(?=$|[^\\w])`, flags)
+        : new RegExp(escaped, flags);
+
+      const newText = matchWord
+        ? text.replace(regex, (match, prefix) => prefix + replacement)
+        : text.replace(regex, replacement);
+
+      undoStack.push({ text: text });
+      redoStack.clear();
+      updateUndoButtons();
+
+      editor.value = newText;
+      docLines.fromArray(newText.split('\n'));
+      updateLineNumbers();
+      updateStats();
+      executeSearch();
+    }
+
+    // -------------------------------------------------------------------------
+    // 5. FILE HANDLING & ACTIONS
+    // -------------------------------------------------------------------------
+
+    function newFile() {
+      if (editor.value.length > 0 && editor.value !== lastSavedContent) {
+        const confirmDiscard = window.confirm("You have unsaved changes. Create a new document anyway?");
+        if (!confirmDiscard) return;
+      }
+      editor.value = "";
+      undoStack.clear();
+      redoStack.clear();
+      updateUndoButtons();
+      syncDocumentFromTextarea(false);
+      currentFileName = "Untitled.txt";
+      document.getElementById('window-title').innerText = `${currentFileName} - Notepad`;
+    }
+
+    function loadFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        editor.value = e.target.result;
+        lastSavedContent = editor.value;
+        undoStack.clear();
+        redoStack.clear();
+        updateUndoButtons();
+        syncDocumentFromTextarea(false);
+        currentFileName = file.name;
+        document.getElementById('window-title').innerText = `${currentFileName} - Notepad`;
+      };
+      reader.readAsText(file);
+      event.target.value = "";
+    }
+
+    function saveFile() {
+      const text = editor.value;
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const anchor = document.createElement("a");
+      anchor.href = URL.createObjectURL(blob);
+      anchor.download = currentFileName || "MyDocument.txt";
+      anchor.click();
+      URL.revokeObjectURL(anchor.href);
+      lastSavedContent = text;
+    }
+
+    function exportPDF() {
+      const lines = docLines.toArray();
+      const printWindow = window.open('', '', 'width=650,height=750');
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>${currentFileName} - PDF Export</title>
+          <style>
+            body { font-family: 'Helvetica', Arial, sans-serif; padding: 40px; color: #111; font-size: 13px; line-height: 1.6; }
+            h2 { font-size: 16px; border-bottom: 2px solid #333; padding-bottom: 6px; margin-bottom: 20px; }
+            p { margin: 4px 0; white-space: pre-wrap; }
+          </style>
+        </head>
+        <body>
+          <h2>${currentFileName}</h2>
+          ${lines.map(l => `<p>${l || '&nbsp;'}</p>`).join('')}
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        performUndo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        performRedo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        saveFile();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        toggleFindBar();
+      }
+    });
+
+    // Start on load
+    window.onload = function() {
+      initEditor();
+    };
+  </script>
+</body>
+</html>
