@@ -24,6 +24,12 @@
       opacity: 1;
     }
 
+    #editor::selection {
+      color: #0f172a;
+      background-color: rgba(59, 130, 246, 0.28);
+      -webkit-text-fill-color: #0f172a;
+    }
+
     #highlight-layer {
       white-space: pre-wrap;
       overflow-wrap: break-word;
@@ -94,9 +100,14 @@
         <input type="file" id="file-loader" accept=".txt" class="hidden" onchange="loadFile(event)" />
       </label>
 
-      <button onclick="saveFile()" title="Save as .txt (Ctrl+S)" class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 active:bg-slate-300 transition">
+      <button id="save-button" onclick="saveFile()" title="Save (Ctrl+S)" class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 active:bg-slate-300 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed disabled:opacity-100 disabled:hover:bg-slate-200 transition">
         <i class="fa-regular fa-floppy-disk text-emerald-600"></i>
         <span>Save</span>
+      </button>
+
+      <button onclick="saveFileAs()" title="Save under a different filename" class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 active:bg-slate-300 transition">
+        <i class="fa-regular fa-pen-to-square text-blue-600"></i>
+        <span>Save As</span>
       </button>
 
       <button onclick="exportPDF()" title="Export PDF" class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 active:bg-slate-300 transition">
@@ -200,7 +211,7 @@
         onscroll="syncScroll()" 
         onkeyup="updateCursorPosition()" 
         onclick="updateCursorPosition()"
-        class="relative z-10 w-full h-full p-3 pt-3 bg-transparent text-transparent caret-slate-800 editor-font resize-none focus:outline-none overflow-y-auto leading-[22px] selection:bg-blue-200 selection:text-transparent"></textarea>
+        class="relative z-10 w-full h-full p-3 pt-3 bg-transparent text-transparent caret-slate-800 editor-font resize-none focus:outline-none overflow-y-auto leading-[22px] select-text"></textarea>
     </div>
   </main>
 
@@ -214,6 +225,7 @@
       <span><strong class="text-slate-800">Characters:</strong> <span id="stat-chars">0</span></span>
     </div>
     <div class="flex items-center gap-3 text-[11px] text-slate-500">
+      <span id="save-status" role="status" aria-live="polite"></span>
       <span>UTF-8</span>
     </div>
   </footer>
@@ -396,8 +408,10 @@
     const redoStack = new CircularStack(100);
 
     let currentFileName = "Untitled.txt";
+    let currentFileHandle = null;
     let activeAlgorithm = "BM";
     let lastSavedContent = "";
+    let hasSavedDocument = false;
     let searchMatches = [];
     let currentMatchIndex = -1;
 
@@ -406,10 +420,28 @@
       const initial = "Welcome to Text Editor\nThis is my first saved file.\nFile handling is working.";
       editor.value = initial;
       lastSavedContent = initial;
+      hasSavedDocument = false;
       syncDocumentFromTextarea(false);
       updateLineNumbers();
       updateStats();
       renderSearchHighlights();
+      updateWindowTitle();
+      updateSaveButton();
+    }
+
+    function updateWindowTitle() {
+      document.getElementById('window-title').innerText = currentFileName;
+      document.title = `${currentFileName} - Text Editor`;
+    }
+
+    function updateSaveButton() {
+      const clean = hasSavedDocument && editor.value === lastSavedContent;
+      const button = document.getElementById('save-button');
+      button.disabled = clean;
+      button.setAttribute('aria-disabled', clean ? 'true' : 'false');
+      button.querySelector('span').innerText = clean ? 'Saved' : 'Save';
+      button.title = clean ? 'No unsaved changes' : 'Save changes (Ctrl+S)';
+      document.getElementById('save-status').innerText = clean ? 'Saved' : 'Unsaved changes';
     }
 
     // Synchronize textarea text with Doubly Linked List
@@ -452,6 +484,7 @@
       syncDocumentFromTextarea();
       updateLineNumbers();
       updateStats();
+      updateSaveButton();
       if (!document.getElementById('find-toolbar').classList.contains('hidden')) {
         executeSearch();
       } else {
@@ -498,6 +531,7 @@
       updateStats();
       if (!document.getElementById('find-toolbar').classList.contains('hidden')) executeSearch();
       else renderSearchHighlights();
+      updateSaveButton();
       updateUndoButtons();
     }
 
@@ -515,6 +549,7 @@
       updateStats();
       if (!document.getElementById('find-toolbar').classList.contains('hidden')) executeSearch();
       else renderSearchHighlights();
+      updateSaveButton();
       updateUndoButtons();
     }
 
@@ -649,6 +684,7 @@
       docLines.fromArray(newText.split('\n'));
       updateLineNumbers();
       updateStats();
+      updateSaveButton();
       executeSearch();
     }
 
@@ -678,6 +714,7 @@
       docLines.fromArray(newText.split('\n'));
       updateLineNumbers();
       updateStats();
+      updateSaveButton();
       executeSearch();
     }
 
@@ -699,7 +736,11 @@
       currentMatchIndex = -1;
       renderSearchHighlights();
       currentFileName = "Untitled.txt";
-      document.getElementById('window-title').innerText = `${currentFileName} - Notepad`;
+      currentFileHandle = null;
+      lastSavedContent = "";
+      hasSavedDocument = false;
+      updateWindowTitle();
+      updateSaveButton();
     }
 
     function loadFile(event) {
@@ -718,21 +759,83 @@
         currentMatchIndex = -1;
         renderSearchHighlights();
         currentFileName = file.name;
-        document.getElementById('window-title').innerText = `${currentFileName} - Notepad`;
+        currentFileHandle = null;
+        hasSavedDocument = true;
+        updateWindowTitle();
+        updateSaveButton();
       };
       reader.readAsText(file);
       event.target.value = "";
     }
 
-    function saveFile() {
+    async function saveFile() {
+      if (currentFileHandle) {
+        try {
+          await writeDocumentToHandle(currentFileHandle);
+        } catch (error) {
+          document.getElementById('save-status').innerText = 'Save failed; changes are still unsaved.';
+        }
+        return;
+      }
+      await saveFileAs();
+    }
+
+    async function saveFileAs() {
+      if (!window.showSaveFilePicker) {
+        downloadTextFile(currentFileName || 'Untitled.txt');
+        return;
+      }
+
+      let handle;
+      try {
+        handle = await window.showSaveFilePicker({
+          suggestedName: currentFileName || 'Untitled.txt',
+          types: [{ description: 'Text files', accept: { 'text/plain': ['.txt'] } }]
+        });
+      } catch (error) {
+        if (error && error.name === 'AbortError') return;
+        document.getElementById('save-status').innerText = 'Could not open the save picker.';
+        return;
+      }
+
+      currentFileHandle = handle;
+      currentFileName = handle.name;
+      updateWindowTitle();
+      try {
+        await writeDocumentToHandle(handle);
+      } catch (error) {
+        document.getElementById('save-status').innerText = 'Save failed; changes are still unsaved.';
+      }
+    }
+
+    async function writeDocumentToHandle(handle) {
+      const writable = await handle.createWritable();
+      await writable.write(editor.value);
+      await writable.close();
+      lastSavedContent = editor.value;
+      hasSavedDocument = true;
+      currentFileName = handle.name;
+      updateWindowTitle();
+      updateSaveButton();
+    }
+
+    function downloadTextFile(filename) {
       const text = editor.value;
       const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
       const anchor = document.createElement("a");
       anchor.href = URL.createObjectURL(blob);
-      anchor.download = currentFileName || "MyDocument.txt";
+      anchor.download = filename;
+      anchor.style.position = 'fixed';
+      anchor.style.left = '-10000px';
+      document.body.appendChild(anchor);
       anchor.click();
-      URL.revokeObjectURL(anchor.href);
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
       lastSavedContent = text;
+      hasSavedDocument = true;
+      currentFileName = filename;
+      updateWindowTitle();
+      updateSaveButton();
     }
 
     function exportPDF() {
@@ -768,9 +871,12 @@
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         performRedo();
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        saveFileAs();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        saveFile();
+        if (!document.getElementById('save-button').disabled) saveFile();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         toggleFindBar();
