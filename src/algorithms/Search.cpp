@@ -38,6 +38,15 @@ vector<int> findMatchesInLine(const string& line,
                               const PatternMatcher& matcher,
                               const SearchOptions& opts)
 {
+    SearchStats stats;
+    return findMatchesInLine(line, matcher, opts, stats);
+}
+
+vector<int> findMatchesInLine(const string& line,
+                              const PatternMatcher& matcher,
+                              const SearchOptions& opts,
+                              SearchStats& stats)
+{
     vector<int> positions;
     const int m = matcher.patternLength();
 
@@ -56,7 +65,7 @@ vector<int> findMatchesInLine(const string& line,
     int pos = 0;
     while (true)
     {
-        int p = matcher.findNext(*text, pos);
+        int p = matcher.findNext(*text, pos, stats);
         if (p < 0)
             break;
 
@@ -101,6 +110,12 @@ KMPMatcher::KMPMatcher(const string& pat) : pattern(pat), lps(pat.size(), 0)
 
 int KMPMatcher::findNext(const string& text, int from) const
 {
+    SearchStats stats;
+    return findNext(text, from, stats);
+}
+
+int KMPMatcher::findNext(const string& text, int from, SearchStats& stats) const
+{
     const int n = (int)text.size();
     const int m = (int)pattern.size();
 
@@ -111,10 +126,20 @@ int KMPMatcher::findNext(const string& text, int from) const
     for (int i = from; i < n; i++)
     {
         while (j > 0 && text[i] != pattern[j])
+        {
+            stats.comparisons++;
             j = lps[j - 1];
+        }
 
         if (text[i] == pattern[j])
+        {
+            stats.comparisons++;
             j++;
+        }
+        else
+        {
+            stats.comparisons++;
+        }
 
         if (j == m)
             return i - m + 1;
@@ -179,6 +204,12 @@ void BoyerMooreMatcher::buildGoodSuffix()
 
 int BoyerMooreMatcher::findNext(const string& text, int from) const
 {
+    SearchStats stats;
+    return findNext(text, from, stats);
+}
+
+int BoyerMooreMatcher::findNext(const string& text, int from, SearchStats& stats) const
+{
     const int n = (int)text.size();
     const int m = (int)pattern.size();
 
@@ -191,7 +222,13 @@ int BoyerMooreMatcher::findNext(const string& text, int from) const
         int j = m - 1;
 
         while (j >= 0 && pattern[j] == text[s + j])
+        {
+            stats.comparisons++;
             j--;
+        }
+
+        if (j >= 0)
+            stats.comparisons++;
 
         if (j < 0)
             return s;
@@ -225,6 +262,24 @@ static vector<SearchResult> runSearch(const vector<string>& lines,
     return results;
 }
 
+static vector<SearchResult> runSearch(const vector<string>& lines,
+                                      const PatternMatcher& matcher,
+                                      const SearchOptions& opts,
+                                      SearchStats& stats)
+{
+    vector<SearchResult> results;
+
+    for (int line = 0; line < (int)lines.size(); line++)
+    {
+        vector<int> hits = findMatchesInLine(lines[line], matcher, opts, stats);
+
+        for (int p : hits)
+            results.push_back({line + 1, p + 1});
+    }
+
+    return results;
+}
+
 vector<SearchResult> Search::searchText(const vector<string>& lines,
                                         const string& pattern,
                                         const SearchOptions& opts) const
@@ -245,4 +300,28 @@ vector<SearchResult> Search::boyerMooreSearch(const vector<string>& lines,
 
     BoyerMooreMatcher matcher(opts.caseSensitive ? pattern : toLowerCopy(pattern));
     return runSearch(lines, matcher, opts);
+}
+
+vector<SearchResult> Search::searchText(const vector<string>& lines,
+                                        const string& pattern,
+                                        const SearchOptions& opts,
+                                        SearchStats& stats) const
+{
+    if (pattern.empty())
+        return vector<SearchResult>();
+
+    KMPMatcher matcher(opts.caseSensitive ? pattern : toLowerCopy(pattern));
+    return runSearch(lines, matcher, opts, stats);
+}
+
+vector<SearchResult> Search::boyerMooreSearch(const vector<string>& lines,
+                                              const string& pattern,
+                                              const SearchOptions& opts,
+                                              SearchStats& stats) const
+{
+    if (pattern.empty())
+        return vector<SearchResult>();
+
+    BoyerMooreMatcher matcher(opts.caseSensitive ? pattern : toLowerCopy(pattern));
+    return runSearch(lines, matcher, opts, stats);
 }

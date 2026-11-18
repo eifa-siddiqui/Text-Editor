@@ -1,5 +1,4 @@
-#ifndef DOCUMENT_H
-#define DOCUMENT_H
+#pragma once
 
 #include <string>
 #include <vector>
@@ -60,6 +59,6 @@ public:
     bool openFromFile(std::string filename);
     bool exportToPDF(std::string filename);
     void newDocument();
+    void clearHistory();
 };
 
-#endif // DOCUMENT_H

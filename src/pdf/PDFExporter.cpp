@@ -73,7 +73,7 @@ bool PDFExporter::exportToPDF(
     vector<long> offsets;
     offsets.push_back(0);
 
-    for (int i = 0; i < objects.size(); i++)
+    for (size_t i = 0; i < objects.size(); i++)
     {
         offsets.push_back((long)file.tellp());
 
@@ -88,7 +88,7 @@ bool PDFExporter::exportToPDF(
     file << "0 " << objects.size() + 1 << "\n";
     file << "0000000000 65535 f \n";
 
-    for (int i = 1; i < offsets.size(); i++)
+    for (size_t i = 1; i < offsets.size(); i++)
     {
         char buffer[30];
 

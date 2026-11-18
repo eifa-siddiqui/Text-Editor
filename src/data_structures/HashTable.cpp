@@ -1,4 +1,3 @@
-
 #include "../../include/data_structures/HashTable.h"
 
 using namespace std;

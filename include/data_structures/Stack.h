@@ -1,5 +1,4 @@
-#ifndef STACK_H
-#define STACK_H
+#pragma once
 
 #include <stdexcept>
 #include <utility>
@@ -120,5 +119,3 @@ public:
         bottomIndex = 0;
     }
 };
-
-#endif // STACK_H

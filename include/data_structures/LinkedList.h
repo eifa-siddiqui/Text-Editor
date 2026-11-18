@@ -1,5 +1,4 @@
-#ifndef LINKED_LIST_H
-#define LINKED_LIST_H
+#pragma once
 
 #include <string>
 #include <vector>
@@ -190,5 +189,3 @@ public:
         }
     }
 };
-
-#endif // LINKED_LIST_H

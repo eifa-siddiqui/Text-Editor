@@ -15,7 +15,7 @@ This project implements a basic line-oriented text editor in C++. It keeps docum
 
 ## 3. System and design overview
 
-`Document` coordinates the line store, history manager, file manager, search/replacement routines, trie, hash table, and PDF exporter. The console front end in `src/main.cpp` validates menu input and invokes those operations. The browser front end in `ui/index.html` maintains its own document state and algorithms.
+`Document` coordinates the line store, history manager, file manager, search/replacement routines, trie, hash table, and PDF exporter. The thin `src/main.cpp` entry point starts `ConsoleApp`, while `src/app/ConsoleApp.cpp` handles console menu input. `src/server/TextEditorServer.cpp` exposes the same C++ `Document` implementation over a local HTTP API. `ui/index.html` is only the presentation and input layer; it sends browser actions to C++ and does not implement duplicate linked-list, stack, search, replacement, trie, hash-table, file, or PDF logic.
 
 ## 4. Data structures and justification
 
@@ -61,18 +61,35 @@ Let n be the number of document lines, N the total number of text bytes, m the p
 
 ## 6. Testing strategy and cases
 
-The following cases should be run against the console application and, where applicable, the browser UI. This report records a test plan; it does not claim these cases have been executed.
+The native implementation was compiled with:
 
-1. Create an empty document; display it and verify zero lines/characters are reported consistently with the chosen empty-document convention.
-2. Insert at the first line, middle line, and one-past-end line; reject positions below 1 or beyond the allowed range.
-3. Insert text at column 1 and at the end of a line; reject column 0 and a column past end-plus-one.
-4. Delete one character and a multi-character range; reject zero/negative length and ranges extending beyond the line.
-5. Delete one line and a multi-line range; verify undo restores original order and redo reapplies the deletion.
-6. Search empty pattern, missing pattern, overlapping candidate text, case-sensitive/case-insensitive text, and whole-word boundaries (including underscores and punctuation).
-7. Replace one selected occurrence and all occurrences; verify whole-word and case options match search behavior and undo restores the prior content.
-8. Undo and redo insertions, deletions, updates, and replacements; make a new edit after undo and verify redo history clears; exceed 100 actions and verify the history remains bounded.
-9. Open a missing file, save under a new filename, load an empty file, and verify invalid input does not terminate the program.
-10. Check word frequency and suggestions with repeated words, mixed case, punctuation, and empty documents.
+```text
+g++ -std=c++17 -Wall -Wextra -pedantic -Iinclude ^
+  src/main.cpp src/app/ConsoleApp.cpp src/algorithms/Search.cpp src/algorithms/Replace.cpp ^
+  src/core/Document.cpp src/data_structures/HashTable.cpp ^
+  src/data_structures/Trie.cpp src/file_handling/FileManager.cpp ^
+  src/pdf/PDFExporter.cpp src/undo/UndoManager.cpp -o text-editor
+```
+
+Representative checks were run against the native classes and console workflow:
+
+1. Empty-document state, line insertion, invalid line position, and character insertion/deletion.
+2. KMP and Boyer–Moore search with case-sensitive, case-insensitive, and whole-word options.
+3. Replace-all, undo/redo state restoration, and redo invalidation after a new edit.
+4. Word frequency, trie suggestions, plain-text save/open, and PDF header generation.
+5. Search-demonstration counts record character comparisons performed by KMP and Boyer-Moore.
+   The console prints `Character comparisons: <count> (<algorithm>)` after each search.
+
+The remaining boundary cases in the list below are the recommended submission checklist and still need captured
+terminal/browser evidence:
+
+5. Delete line ranges; verify undo restores order and redo reapplies deletion.
+6. Reject invalid text ranges, empty search strings, missing files, and operations on an empty document.
+7. Exceed 100 edits and verify the documented bounded-history behavior.
+
+The browser UI is an independent JavaScript implementation and should be tested separately in a browser. Screenshots or
+terminal transcripts should be added to the submission copy of this report when required by the instructor; no screenshot is
+claimed here because the repository contains no captured test evidence.
 
 ## 7. Limitations
 

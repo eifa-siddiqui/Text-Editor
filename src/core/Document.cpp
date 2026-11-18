@@ -359,3 +359,8 @@ void Document::newDocument()
     wordTrie.clear();
     wordFrequency.clear();
 }
+
+void Document::clearHistory()
+{
+    history.clearHistory();
+}

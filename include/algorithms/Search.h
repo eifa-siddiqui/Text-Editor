@@ -19,6 +19,11 @@ struct SearchOptions
     bool wholeWord     = false;   // true  -> "the" does not match inside "other"
 };
 
+struct SearchStats
+{
+    long long comparisons = 0;
+};
+
 // ---------------------------------------------------------------------------
 // PatternMatcher: a pattern that is pre-processed ONCE and can then be
 // searched in many lines.  findNext() returns the index of the first match at
@@ -29,6 +34,7 @@ class PatternMatcher
 public:
     virtual ~PatternMatcher() {}
     virtual int findNext(const string& text, int from) const = 0;
+    virtual int findNext(const string& text, int from, SearchStats& stats) const = 0;
     virtual int patternLength() const = 0;
 };
 
@@ -42,6 +48,7 @@ private:
 public:
     explicit KMPMatcher(const string& pat);
     int findNext(const string& text, int from) const override;
+    int findNext(const string& text, int from, SearchStats& stats) const override;
     int patternLength() const override { return (int)pattern.size(); }
 };
 
@@ -61,6 +68,7 @@ private:
 public:
     explicit BoyerMooreMatcher(const string& pat);
     int findNext(const string& text, int from) const override;
+    int findNext(const string& text, int from, SearchStats& stats) const override;
     int patternLength() const override { return (int)pattern.size(); }
 };
 
@@ -77,6 +85,11 @@ vector<int> findMatchesInLine(const string& line,
                               const PatternMatcher& matcher,
                               const SearchOptions& opts);
 
+vector<int> findMatchesInLine(const string& line,
+                              const PatternMatcher& matcher,
+                              const SearchOptions& opts,
+                              SearchStats& stats);
+
 class Search
 {
 public:
@@ -91,4 +104,16 @@ public:
         const vector<string>& lines,
         const string& pattern,
         const SearchOptions& opts = SearchOptions()) const;
+
+    vector<SearchResult> searchText(
+        const vector<string>& lines,
+        const string& pattern,
+        const SearchOptions& opts,
+        SearchStats& stats) const;
+
+    vector<SearchResult> boyerMooreSearch(
+        const vector<string>& lines,
+        const string& pattern,
+        const SearchOptions& opts,
+        SearchStats& stats) const;
 };

@@ -70,6 +70,15 @@
     ::-webkit-scrollbar-thumb:hover {
       background: #94a3b8;
     }
+    .tool-button {
+      padding: 0.25rem 0.625rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 0.25rem;
+      background: #f8fafc;
+    }
+    .tool-button:hover {
+      background: #e2e8f0;
+    }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 flex flex-col h-screen overflow-hidden select-none">
@@ -94,11 +103,10 @@
         <span>New</span>
       </button>
 
-      <label title="Open File" class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 active:bg-slate-300 transition cursor-pointer">
+      <button onclick="openFileDialog()" title="Open File" class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 active:bg-slate-300 transition cursor-pointer">
         <i class="fa-regular fa-folder-open text-amber-600"></i>
         <span>Open</span>
-        <input type="file" id="file-loader" accept=".txt" class="hidden" onchange="loadFile(event)" />
-      </label>
+      </button>
 
       <button id="save-button" onclick="saveFile()" title="Save (Ctrl+S)" class="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-200 active:bg-slate-300 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed disabled:opacity-100 disabled:hover:bg-slate-200 transition">
         <i class="fa-regular fa-floppy-disk text-emerald-600"></i>
@@ -155,6 +163,12 @@
       <input type="text" id="find-query" placeholder="Find text..." oninput="executeSearch()" class="bg-transparent focus:outline-none text-slate-700 w-44 editor-font" />
       <span id="find-counter" class="text-[11px] text-slate-400 font-mono">0 matches</span>
     </div>
+    <div id="comparison-counter" class="flex items-center gap-2 rounded border border-slate-300 bg-slate-50 px-2 py-1 text-[11px] font-mono text-slate-600" aria-live="polite">
+      <span>Comparisons:</span>
+      <span id="kmp-counter" class="text-blue-700">KMP 0</span>
+      <span class="text-slate-300">|</span>
+      <span id="bm-counter" class="text-violet-700">Boyer-Moore 0</span>
+    </div>
     <div class="flex items-center gap-1">
       <button onclick="navigateMatch(-1)" title="Previous match" class="px-2 py-1 rounded border border-slate-300 hover:bg-slate-100">Prev</button>
       <button onclick="navigateMatch(1)" title="Next match" class="px-2 py-1 rounded border border-slate-300 hover:bg-slate-100">Next</button>
@@ -194,6 +208,42 @@
     </button>
   </div>
 
+  <!-- ================= C++ DOCUMENT TOOLS ================= -->
+  <div id="cpp-tools" class="bg-white border-b border-slate-200 px-4 py-2 text-xs flex flex-wrap items-center gap-3">
+    <button onclick="toggleCppTools()" class="px-2.5 py-1 rounded border border-slate-300 bg-slate-50 hover:bg-slate-100">
+      C++ Editing Tools
+    </button>
+    <div id="cpp-tools-content" class="hidden flex flex-wrap items-center gap-3">
+      <div class="flex items-center gap-1">
+        <input id="tool-line" type="number" min="1" placeholder="Line" class="w-16 border border-slate-300 rounded px-2 py-1" />
+        <input id="tool-column" type="number" min="1" placeholder="Column" class="w-16 border border-slate-300 rounded px-2 py-1" />
+        <input id="tool-text" type="text" placeholder="Text" class="w-32 border border-slate-300 rounded px-2 py-1" />
+      </div>
+      <button onclick="cppInsertLine()" class="tool-button">Insert Line</button>
+      <button onclick="cppUpdateLine()" class="tool-button">Update Line</button>
+      <button onclick="cppDeleteLine()" class="tool-button">Delete Line</button>
+      <div class="flex items-center gap-1">
+        <input id="tool-last-line" type="number" min="1" placeholder="Last" class="w-16 border border-slate-300 rounded px-2 py-1" />
+        <button onclick="cppDeleteLineRange()" class="tool-button">Delete Range</button>
+      </div>
+      <button onclick="cppInsertText()" class="tool-button">Insert Text</button>
+      <div class="flex items-center gap-1">
+        <input id="tool-length" type="number" min="1" placeholder="Length" class="w-16 border border-slate-300 rounded px-2 py-1" />
+        <button onclick="cppDeleteText()" class="tool-button">Delete Text</button>
+      </div>
+      <div class="flex items-center gap-1">
+        <input id="tool-prefix" type="text" placeholder="Suggestion prefix" class="w-36 border border-slate-300 rounded px-2 py-1" />
+        <button onclick="cppSuggestions()" class="tool-button">Suggestions</button>
+      </div>
+      <div class="flex items-center gap-1">
+        <input id="tool-word" type="text" placeholder="Word" class="w-24 border border-slate-300 rounded px-2 py-1" />
+        <button onclick="cppFrequency()" class="tool-button">Frequency</button>
+      </div>
+      <button onclick="cppAllFrequencies()" class="tool-button">All Frequencies</button>
+      <span id="cpp-tools-output" class="max-w-md font-mono text-slate-700"></span>
+    </div>
+  </div>
+
   <!-- ================= NOTEPAD TYPING CANVAS ================= -->
   <main class="flex-1 flex bg-white overflow-hidden relative">
     
@@ -206,7 +256,6 @@
     <div class="flex-1 relative overflow-hidden">
       <div id="highlight-layer" aria-hidden="true" class="absolute inset-0 p-3 pt-3 text-slate-800 editor-font overflow-hidden pointer-events-none"></div>
       <textarea id="editor" spellcheck="false" placeholder="Start typing your text here..." 
-        onbeforeinput="captureUndoState(event)"
         oninput="handleEditorInput()" 
         onscroll="syncScroll()" 
         onkeyup="updateCursorPosition()" 
@@ -232,196 +281,54 @@
 
   <!-- ================= APPLICATION ENGINE SCRIPT ================= -->
   <script>
-    // -------------------------------------------------------------------------
-    // 1. DATA STRUCTURES: DOUBLY LINKED LIST & CIRCULAR STACK
-    // -------------------------------------------------------------------------
-
-    class LineNode {
-      constructor(text) {
-        this.text = text;
-        this.prev = null;
-        this.next = null;
-      }
-    }
-
-    class DoublyLinkedList {
-      constructor() {
-        this.head = null;
-        this.tail = null;
-        this.size = 0;
-      }
-
-      clear() {
-        this.head = null;
-        this.tail = null;
-        this.size = 0;
-      }
-
-      insertAtEnd(text) {
-        const node = new LineNode(text);
-        if (!this.tail) {
-          this.head = this.tail = node;
-        } else {
-          this.tail.next = node;
-          node.prev = this.tail;
-          this.tail = node;
-        }
-        this.size++;
-        return node;
-      }
-
-      fromArray(lines) {
-        this.clear();
-        for (const line of lines) {
-          this.insertAtEnd(line);
-        }
-      }
-
-      toArray() {
-        const arr = [];
-        let curr = this.head;
-        while (curr) {
-          arr.push(curr.text);
-          curr = curr.next;
-        }
-        return arr;
-      }
-    }
-
-    // Circular Ring-Buffer Stack (Maximum 100 history items)
-    class CircularStack {
-      constructor(capacity = 100) {
-        this.capacity = capacity;
-        this.data = new Array(capacity);
-        this.count = 0;
-        this.topIndex = -1;
-        this.bottomIndex = 0;
-      }
-
-      push(item) {
-        if (this.count === this.capacity) {
-          this.bottomIndex = (this.bottomIndex + 1) % this.capacity;
-          this.topIndex = (this.topIndex + 1) % this.capacity;
-          this.data[this.topIndex] = item;
-        } else {
-          this.topIndex = (this.topIndex + 1) % this.capacity;
-          this.data[this.topIndex] = item;
-          this.count++;
-        }
-      }
-
-      pop() {
-        if (this.count === 0) return null;
-        const item = this.data[this.topIndex];
-        this.topIndex = (this.topIndex - 1 + this.capacity) % this.capacity;
-        this.count--;
-        return item;
-      }
-
-      empty() { return this.count === 0; }
-      clear() {
-        this.count = 0;
-        this.topIndex = -1;
-        this.bottomIndex = 0;
-      }
-    }
-
-    // -------------------------------------------------------------------------
-    // 2. SEARCH ALGORITHMS: KMP & BOYER-MOORE
-    // -------------------------------------------------------------------------
-
-    // Knuth-Morris-Pratt Search
-    function kmpSearch(text, pattern) {
-      const matches = [];
-      const m = pattern.length;
-      const n = text.length;
-      if (m === 0 || n < m) return matches;
-
-      // Compute LPS table
-      const lps = new Array(m).fill(0);
-      let len = 0, i = 1;
-      while (i < m) {
-        if (pattern[i] === pattern[len]) {
-          len++;
-          lps[i++] = len;
-        } else if (len !== 0) {
-          len = lps[len - 1];
-        } else {
-          lps[i++] = 0;
-        }
-      }
-
-      // Scan text
-      i = 0;
-      let j = 0;
-      while (i < n) {
-        if (pattern[j] === text[i]) {
-          i++;
-          j++;
-        }
-        if (j === m) {
-          matches.push(i - m);
-          j = lps[j - 1];
-        } else if (i < n && pattern[j] !== text[i]) {
-          if (j !== 0) j = lps[j - 1];
-          else i++;
-        }
-      }
-      return matches;
-    }
-
-    // Boyer-Moore Search (Bad Character heuristic)
-    function boyerMooreSearch(text, pattern) {
-      const matches = [];
-      const m = pattern.length;
-      const n = text.length;
-      if (m === 0 || n < m) return matches;
-
-      const badChar = {};
-      for (let i = 0; i < m; i++) badChar[pattern[i]] = i;
-
-      let s = 0;
-      while (s <= n - m) {
-        let j = m - 1;
-        while (j >= 0 && pattern[j] === text[s + j]) j--;
-
-        if (j < 0) {
-          matches.push(s);
-          s += (s + m < n) ? m - (badChar[text[s + m]] !== undefined ? badChar[text[s + m]] : -1) : 1;
-        } else {
-          const badCharShift = j - (badChar[text[s + j]] !== undefined ? badChar[text[s + j]] : -1);
-          s += Math.max(1, badCharShift);
-        }
-      }
-      return matches;
-    }
-
-    // -------------------------------------------------------------------------
-    // 3. EDITOR STATE & EVENT HANDLERS
-    // -------------------------------------------------------------------------
+    // Browser script: presentation and C++ API calls only.
 
     const editor = document.getElementById('editor');
     const gutter = document.getElementById('gutter');
     const highlightLayer = document.getElementById('highlight-layer');
-    const docLines = new DoublyLinkedList();
-    const undoStack = new CircularStack(100);
-    const redoStack = new CircularStack(100);
 
     let currentFileName = "Untitled.txt";
-    let currentFileHandle = null;
     let activeAlgorithm = "BM";
-    let lastSavedContent = "";
-    let hasSavedDocument = false;
     let searchMatches = [];
     let currentMatchIndex = -1;
+    let syncTimer = null;
+    const cppApiBase = "http://127.0.0.1:8080";
+
+    async function cppApi(path, options = {}) {
+      const response = await fetch(cppApiBase + path, options);
+      if (!response.ok) throw new Error(`C++ server returned ${response.status}`);
+      return response.json();
+    }
+
+    function syncCppDocument() {
+      return cppApi('/api/set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: editor.value })
+      }).then(result => {
+        updateUndoButtons(result.undoCount, result.redoCount);
+        updateSaveButton(result.dirty);
+        updateCppFilename(result.filename);
+        updateLineNumbers(result.lines);
+        return result;
+      }).catch(error => console.error('C++ document sync failed:', error));
+    }
 
     // Initialize initial text
     function initEditor() {
       const initial = "Welcome to Text Editor\nThis is my first saved file.\nFile handling is working.";
       editor.value = initial;
-      lastSavedContent = initial;
-      hasSavedDocument = false;
       syncDocumentFromTextarea(false);
+      cppApi('/api/open-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: initial })
+      }).then(result => {
+        updateUndoButtons(result.undoCount, result.redoCount);
+        updateSaveButton(result.dirty);
+        updateCppFilename(result.filename);
+      })
+        .catch(error => console.error('C++ initial document setup failed:', error));
       updateLineNumbers();
       updateStats();
       renderSearchHighlights();
@@ -434,8 +341,8 @@
       document.title = `${currentFileName} - Text Editor`;
     }
 
-    function updateSaveButton() {
-      const clean = hasSavedDocument && editor.value === lastSavedContent;
+    function updateSaveButton(dirty = true) {
+      const clean = !dirty;
       const button = document.getElementById('save-button');
       button.disabled = clean;
       button.setAttribute('aria-disabled', clean ? 'true' : 'false');
@@ -444,25 +351,37 @@
       document.getElementById('save-status').innerText = clean ? 'Saved' : 'Unsaved changes';
     }
 
+    function updateCppFilename(filename) {
+      if (!filename) return;
+      currentFileName = filename.split(/[\\\\/]/).pop();
+      updateWindowTitle();
+    }
+
     // Synchronize textarea text with Doubly Linked List
     function syncDocumentFromTextarea() {
-      const text = editor.value;
-      const lines = text.split('\n');
-      docLines.fromArray(lines);
       updateLineNumbers();
       updateStats();
     }
 
     // Synchronize gutter line numbers
-    function updateLineNumbers() {
-      const lines = editor.value.split('\n');
-      const count = lines.length;
-      let gutterHTML = '';
-      for (let i = 1; i <= count; i++) {
-        gutterHTML += `<div>${i}</div>`;
+    function updateLineNumbers(lineCount) {
+      if (Number.isInteger(lineCount) && lineCount >= 1) {
+        let gutterHTML = '';
+        for (let i = 1; i <= lineCount; i++) {
+          gutterHTML += `<div style="height:22px;line-height:22px">${i}</div>`;
+        }
+        gutter.innerHTML = gutterHTML;
+        document.getElementById('stat-lines-total').innerText = lineCount;
+        return;
       }
-      gutter.innerHTML = gutterHTML;
-      document.getElementById('stat-lines-total').innerText = count;
+      cppApi('/api/stats').then(result => {
+        let gutterHTML = '';
+        for (let i = 1; i <= result.lines; i++) {
+          gutterHTML += `<div style="height:22px;line-height:22px">${i}</div>`;
+        }
+        gutter.innerHTML = gutterHTML;
+        document.getElementById('stat-lines-total').innerText = result.lines;
+      }).catch(error => console.error('C++ line numbers failed:', error));
     }
 
     // Keep line numbers scrolled in sync with the textarea
@@ -472,19 +391,12 @@
       highlightLayer.scrollLeft = editor.scrollLeft;
     }
 
-    // Save the pre-edit state before the browser changes the textarea value.
-    function captureUndoState(event) {
-      if (event.inputType && event.inputType.startsWith('history')) return;
-      undoStack.push({ text: editor.value });
-      redoStack.clear();
-      updateUndoButtons();
-    }
-
     function handleEditorInput() {
       syncDocumentFromTextarea();
-      updateLineNumbers();
       updateStats();
       updateSaveButton();
+      clearTimeout(syncTimer);
+      syncTimer = setTimeout(syncCppDocument, 150);
       if (!document.getElementById('find-toolbar').classList.contains('hidden')) {
         executeSearch();
       } else {
@@ -508,54 +420,127 @@
 
     // Document Statistics
     function updateStats() {
-      const text = editor.value;
-      const chars = text.length;
-      const words = text.trim() ? (text.trim().match(/\b\w+\b/g) || []).length : 0;
+      cppApi('/api/stats').then(result => {
+        document.getElementById('stat-lines-total').innerText = result.lines;
+        document.getElementById('stat-chars').innerText = result.characters;
+      }).catch(error => console.error('C++ stats failed:', error));
+      cppApi('/api/frequencies').then(result => {
+        const words = result.reduce((total, item) => total + item.count, 0);
+        document.getElementById('stat-words').innerText = words;
+      }).catch(error => console.error('C++ word count failed:', error));
+    }
 
-      document.getElementById('stat-chars').innerText = chars;
-      document.getElementById('stat-words').innerText = words;
+    function toggleCppTools() {
+      document.getElementById('cpp-tools-content').classList.toggle('hidden');
+    }
+
+    function showCppDocumentResult(result) {
+      if (typeof result.text === 'string') {
+        editor.value = result.text;
+      }
+      updateUndoButtons(result.undoCount, result.redoCount);
+      updateSaveButton(result.dirty);
+      updateCppFilename(result.filename);
+      updateLineNumbers();
+      updateStats();
+      updateSaveButton();
+      if (!document.getElementById('find-toolbar').classList.contains('hidden')) executeSearch();
+    }
+
+    async function cppLineOperation(operation, extra = {}) {
+      const result = await cppApi('/api/line', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation,
+          position: Number(document.getElementById('tool-line').value),
+          text: document.getElementById('tool-text').value,
+          last: Number(document.getElementById('tool-last-line').value),
+          ...extra
+        })
+      });
+      showCppDocumentResult(result);
+      document.getElementById('cpp-tools-output').innerText =
+        result.success ? 'C++ operation successful' : 'Invalid C++ operation';
+    }
+
+    function cppInsertLine() { cppLineOperation('insert'); }
+    function cppUpdateLine() { cppLineOperation('update'); }
+    function cppDeleteLine() { cppLineOperation('delete'); }
+    function cppDeleteLineRange() { cppLineOperation('deleteRange'); }
+
+    async function cppTextOperation(operation) {
+      const result = await cppApi('/api/text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation,
+          line: Number(document.getElementById('tool-line').value),
+          column: Number(document.getElementById('tool-column').value),
+          text: document.getElementById('tool-text').value,
+          length: Number(document.getElementById('tool-length').value)
+        })
+      });
+      showCppDocumentResult(result);
+      document.getElementById('cpp-tools-output').innerText =
+        result.success ? 'C++ operation successful' : 'Invalid C++ operation';
+    }
+
+    function cppInsertText() { cppTextOperation('insert'); }
+    function cppDeleteText() { cppTextOperation('delete'); }
+
+    async function cppSuggestions() {
+      const prefix = document.getElementById('tool-prefix').value;
+      const words = await cppApi('/api/suggestions?prefix=' + encodeURIComponent(prefix));
+      document.getElementById('cpp-tools-output').innerText =
+        words.length ? 'Suggestions: ' + words.join(', ') : 'No suggestions found';
+    }
+
+    async function cppFrequency() {
+      const word = document.getElementById('tool-word').value;
+      const result = await cppApi('/api/frequency?word=' + encodeURIComponent(word));
+      document.getElementById('cpp-tools-output').innerText =
+        `${word} appears ${result.count} time(s)`;
+    }
+
+    async function cppAllFrequencies() {
+      const frequencies = await cppApi('/api/frequencies');
+      document.getElementById('cpp-tools-output').innerText =
+        frequencies.length
+          ? frequencies.map(item => `${item.word}: ${item.count}`).join(' | ')
+          : 'No words found';
     }
 
     // Undo & Redo
     function performUndo() {
-      if (undoStack.empty()) return;
-
-      const current = { text: editor.value };
-      redoStack.push(current);
-
-      const previous = undoStack.pop();
-      editor.value = previous.text;
-
-      docLines.fromArray(previous.text.split('\n'));
-      updateLineNumbers();
-      updateStats();
-      if (!document.getElementById('find-toolbar').classList.contains('hidden')) executeSearch();
-      else renderSearchHighlights();
-      updateSaveButton();
-      updateUndoButtons();
+      cppApi('/api/undo', { method: 'POST' }).then(result => {
+        if (!result.changed) return;
+        editor.value = result.text;
+        updateUndoButtons(result.undoCount, result.redoCount);
+        updateLineNumbers();
+        updateStats();
+        updateSaveButton();
+        if (!document.getElementById('find-toolbar').classList.contains('hidden')) executeSearch();
+        else renderSearchHighlights();
+      }).catch(error => console.error('C++ undo failed:', error));
     }
 
     function performRedo() {
-      if (redoStack.empty()) return;
-
-      const current = { text: editor.value };
-      undoStack.push(current);
-
-      const nextState = redoStack.pop();
-      editor.value = nextState.text;
-
-      docLines.fromArray(nextState.text.split('\n'));
-      updateLineNumbers();
-      updateStats();
-      if (!document.getElementById('find-toolbar').classList.contains('hidden')) executeSearch();
-      else renderSearchHighlights();
-      updateSaveButton();
-      updateUndoButtons();
+      cppApi('/api/redo', { method: 'POST' }).then(result => {
+        if (!result.changed) return;
+        editor.value = result.text;
+        updateUndoButtons(result.undoCount, result.redoCount);
+        updateLineNumbers();
+        updateStats();
+        updateSaveButton();
+        if (!document.getElementById('find-toolbar').classList.contains('hidden')) executeSearch();
+        else renderSearchHighlights();
+      }).catch(error => console.error('C++ redo failed:', error));
     }
 
-    function updateUndoButtons() {
-      document.getElementById('btn-undo').disabled = undoStack.empty();
-      document.getElementById('btn-redo').disabled = redoStack.empty();
+    function updateUndoButtons(undoCount = 0, redoCount = 0) {
+      document.getElementById('btn-undo').disabled = undoCount <= 0;
+      document.getElementById('btn-redo').disabled = redoCount <= 0;
     }
 
     // -------------------------------------------------------------------------
@@ -580,20 +565,28 @@
       executeSearch();
     }
 
-    function executeSearch() {
+    async function executeSearch() {
       const query = document.getElementById('find-query').value;
       const matchCase = document.getElementById('find-case').checked;
       const matchWord = document.getElementById('find-word').checked;
       const counter = document.getElementById('find-counter');
+      const kmpCounter = document.getElementById('kmp-counter');
+      const bmCounter = document.getElementById('bm-counter');
 
       searchMatches = [];
       currentMatchIndex = -1;
 
       if (!query) {
         counter.innerText = '0 matches';
+        kmpCounter.innerText = 'KMP 0';
+        bmCounter.innerText = 'Boyer-Moore 0';
+        kmpCounter.className = 'text-blue-700';
+        bmCounter.className = 'text-violet-700';
         renderSearchHighlights();
         return;
       }
+
+      await syncCppDocument();
 
       let text = editor.value;
       let pattern = query;
@@ -603,28 +596,50 @@
         pattern = pattern.toLowerCase();
       }
 
-      let rawMatches = (activeAlgorithm === 'KMP') 
-        ? kmpSearch(text, pattern) 
-        : boyerMooreSearch(text, pattern);
+      const params = new URLSearchParams({
+        pattern,
+        caseSensitive: matchCase ? 'true' : 'false',
+        wholeWord: matchWord ? 'true' : 'false',
+        algorithm: activeAlgorithm
+      });
 
-      if (matchWord) {
-        const fullText = editor.value;
-        rawMatches = rawMatches.filter(idx => {
-          const before = idx > 0 ? fullText[idx - 1] : ' ';
-          const after = (idx + query.length < fullText.length) ? fullText[idx + query.length] : ' ';
-          return !/\w/.test(before) && !/\w/.test(after);
-        });
-      }
+      Promise.all([
+        cppApi('/api/search?' + new URLSearchParams({ ...Object.fromEntries(params), algorithm: 'KMP' })),
+        cppApi('/api/search?' + new URLSearchParams({ ...Object.fromEntries(params), algorithm: 'BM' }))
+      ]).then(([kmpResult, bmResult]) => {
+        kmpCounter.innerText = `KMP ${kmpResult.comparisons}`;
+        bmCounter.innerText = `Boyer-Moore ${bmResult.comparisons}`;
+        kmpCounter.className = activeAlgorithm === 'KMP'
+          ? 'font-bold text-blue-700'
+          : 'text-blue-700';
+        bmCounter.className = activeAlgorithm === 'BM'
+          ? 'font-bold text-violet-700'
+          : 'text-violet-700';
 
-      searchMatches = rawMatches;
+        const rawMatches = activeAlgorithm === 'KMP'
+          ? kmpResult.matches
+          : bmResult.matches;
 
-      if (searchMatches.length > 0) {
-        currentMatchIndex = 0;
-        counter.innerText = `${searchMatches.length} match${searchMatches.length === 1 ? '' : 'es'}`;
-      } else {
-        counter.innerText = '0 matches';
-      }
-      renderSearchHighlights();
+        const lineOffsets = [0];
+        const lines = editor.value.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          lineOffsets.push(lineOffsets[i] + lines[i].length + 1);
+        }
+        searchMatches = rawMatches.map(match => lineOffsets[match.line - 1] + match.column - 1);
+
+        if (searchMatches.length > 0) {
+          currentMatchIndex = 0;
+          counter.innerText = `${searchMatches.length} match${searchMatches.length === 1 ? '' : 'es'}`;
+        } else {
+          counter.innerText = '0 matches';
+        }
+        renderSearchHighlights();
+      }).catch(error => {
+        counter.innerText = 'C++ server unavailable';
+        kmpCounter.innerText = 'KMP --';
+        bmCounter.innerText = 'Boyer-Moore --';
+        console.error(error);
+      });
     }
 
     function escapeHtml(text) {
@@ -671,51 +686,47 @@
       const query = document.getElementById('find-query').value;
       const replacement = document.getElementById('replace-query').value;
       if (!query || searchMatches.length === 0) return;
-
-      const idx = searchMatches[currentMatchIndex];
-      const text = editor.value;
-      const newText = text.substring(0, idx) + replacement + text.substring(idx + query.length);
-
-      undoStack.push({ text: text });
-      redoStack.clear();
-      updateUndoButtons();
-
-      editor.value = newText;
-      docLines.fromArray(newText.split('\n'));
-      updateLineNumbers();
-      updateStats();
-      updateSaveButton();
-      executeSearch();
+      cppApi('/api/replace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pattern: query,
+          replacement,
+          occurrence: currentMatchIndex + 1,
+          caseSensitive: document.getElementById('find-case').checked,
+          wholeWord: document.getElementById('find-word').checked
+        })
+      }).then(result => {
+        editor.value = result.text;
+        updateUndoButtons(result.undoCount, result.redoCount);
+        updateLineNumbers();
+        updateStats();
+        updateSaveButton();
+        executeSearch();
+      }).catch(error => console.error('C++ replace failed:', error));
     }
 
     function replaceAllMatches() {
       const query = document.getElementById('find-query').value;
       const replacement = document.getElementById('replace-query').value;
       if (!query || searchMatches.length === 0) return;
-
-      const text = editor.value;
-      const matchCase = document.getElementById('find-case').checked;
-      const flags = matchCase ? 'g' : 'gi';
-      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const matchWord = document.getElementById('find-word').checked;
-      const regex = matchWord
-        ? new RegExp(`(^|[^\\w])(${escaped})(?=$|[^\\w])`, flags)
-        : new RegExp(escaped, flags);
-
-      const newText = matchWord
-        ? text.replace(regex, (match, prefix) => prefix + replacement)
-        : text.replace(regex, replacement);
-
-      undoStack.push({ text: text });
-      redoStack.clear();
-      updateUndoButtons();
-
-      editor.value = newText;
-      docLines.fromArray(newText.split('\n'));
-      updateLineNumbers();
-      updateStats();
-      updateSaveButton();
-      executeSearch();
+      cppApi('/api/replace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pattern: query,
+          replacement,
+          caseSensitive: document.getElementById('find-case').checked,
+          wholeWord: document.getElementById('find-word').checked
+        })
+      }).then(result => {
+        editor.value = result.text;
+        updateUndoButtons(result.undoCount, result.redoCount);
+        updateLineNumbers();
+        updateStats();
+        updateSaveButton();
+        executeSearch();
+      }).catch(error => console.error('C++ replace failed:', error));
     }
 
     // -------------------------------------------------------------------------
@@ -723,144 +734,117 @@
     // -------------------------------------------------------------------------
 
     function newFile() {
-      if (editor.value.length > 0 && editor.value !== lastSavedContent) {
-        const confirmDiscard = window.confirm("You have unsaved changes. Create a new document anyway?");
-        if (!confirmDiscard) return;
-      }
       editor.value = "";
-      undoStack.clear();
-      redoStack.clear();
-      updateUndoButtons();
       syncDocumentFromTextarea(false);
+      cppApi('/api/new', { method: 'POST' })
+        .then(result => {
+          updateUndoButtons(result.undoCount, result.redoCount);
+          updateSaveButton(result.dirty);
+          updateCppFilename(result.filename);
+        })
+        .catch(error => console.error('C++ new document failed:', error));
       searchMatches = [];
       currentMatchIndex = -1;
       renderSearchHighlights();
       currentFileName = "Untitled.txt";
-      currentFileHandle = null;
-      lastSavedContent = "";
-      hasSavedDocument = false;
       updateWindowTitle();
       updateSaveButton();
     }
 
-    function loadFile(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        editor.value = e.target.result;
-        lastSavedContent = editor.value;
-        undoStack.clear();
-        redoStack.clear();
-        updateUndoButtons();
-        syncDocumentFromTextarea(false);
-        searchMatches = [];
-        currentMatchIndex = -1;
-        renderSearchHighlights();
-        currentFileName = file.name;
-        currentFileHandle = null;
-        hasSavedDocument = true;
+    async function openFileDialog() {
+      const status = document.getElementById('save-status');
+      status.innerText = 'Opening C++ file dialog...';
+      try {
+        const result = await cppApi('/api/open-dialog', { method: 'POST' });
+        if (!result.opened) {
+          status.innerText = result.cancelled
+            ? 'Open cancelled.'
+            : 'C++ file open failed.';
+          return;
+        }
+        showCppDocumentResult(result);
+        currentFileName = result.filename.split(/[\\\\/]/).pop();
         updateWindowTitle();
         updateSaveButton();
-      };
-      reader.readAsText(file);
-      event.target.value = "";
+        status.innerText = `Opened by C++: ${result.filename}`;
+      } catch (error) {
+        status.innerText = 'C++ server unavailable.';
+        console.error(error);
+      }
     }
 
     async function saveFile() {
-      if (currentFileHandle) {
-        try {
-          await writeDocumentToHandle(currentFileHandle);
-        } catch (error) {
-          document.getElementById('save-status').innerText = 'Save failed; changes are still unsaved.';
-        }
-        return;
-      }
-      await saveFileAs();
+      await saveDocumentWithCpp(
+        currentFileName === "Untitled.txt" ? "" : currentFileName
+      );
     }
 
     async function saveFileAs() {
-      if (!window.showSaveFilePicker) {
-        downloadTextFile(currentFileName || 'Untitled.txt');
-        return;
-      }
-
-      let handle;
+      const status = document.getElementById('save-status');
+      status.innerText = 'Opening C++ Save As dialog...';
       try {
-        handle = await window.showSaveFilePicker({
-          suggestedName: currentFileName || 'Untitled.txt',
-          types: [{ description: 'Text files', accept: { 'text/plain': ['.txt'] } }]
+        const result = await cppApi('/api/save-as', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: editor.value, filename: currentFileName })
         });
+        if (result.saved) {
+          updateSaveButton(false);
+          updateCppFilename(result.filename);
+          status.innerText = `Saved by C++: ${result.filename}`;
+        } else {
+          status.innerText = 'Save As cancelled.';
+        }
       } catch (error) {
-        if (error && error.name === 'AbortError') return;
-        document.getElementById('save-status').innerText = 'Could not open the save picker.';
-        return;
+        status.innerText = 'C++ server unavailable.';
+        console.error(error);
       }
+    }
 
-      currentFileHandle = handle;
-      currentFileName = handle.name;
-      updateWindowTitle();
+    async function saveDocumentWithCpp(filename) {
+      const status = document.getElementById('save-status');
+      status.innerText = 'Saving through C++...';
+
       try {
-        await writeDocumentToHandle(handle);
+        const result = await cppApi('/api/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, text: editor.value })
+        });
+
+        if (result.saved) {
+          updateSaveButton(false);
+          updateCppFilename(result.filename);
+          status.innerText = `Saved by C++: ${result.filename}`;
+        } else {
+          status.innerText = 'C++ file save failed.';
+        }
       } catch (error) {
-        document.getElementById('save-status').innerText = 'Save failed; changes are still unsaved.';
+        status.innerText = 'C++ server unavailable. Start TextEditorServer.exe.';
+        console.error(error);
       }
-    }
-
-    async function writeDocumentToHandle(handle) {
-      const writable = await handle.createWritable();
-      await writable.write(editor.value);
-      await writable.close();
-      lastSavedContent = editor.value;
-      hasSavedDocument = true;
-      currentFileName = handle.name;
-      updateWindowTitle();
-      updateSaveButton();
-    }
-
-    function downloadTextFile(filename) {
-      const text = editor.value;
-      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-      const anchor = document.createElement("a");
-      anchor.href = URL.createObjectURL(blob);
-      anchor.download = filename;
-      anchor.style.position = 'fixed';
-      anchor.style.left = '-10000px';
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
-      lastSavedContent = text;
-      hasSavedDocument = true;
-      currentFileName = filename;
-      updateWindowTitle();
-      updateSaveButton();
     }
 
     function exportPDF() {
-      const lines = docLines.toArray();
-      const printWindow = window.open('', '', 'width=650,height=750');
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>${currentFileName} - PDF Export</title>
-          <style>
-            body { font-family: 'Helvetica', Arial, sans-serif; padding: 40px; color: #111; font-size: 13px; line-height: 1.6; }
-            h2 { font-size: 16px; border-bottom: 2px solid #333; padding-bottom: 6px; margin-bottom: 20px; }
-            p { margin: 4px 0; white-space: pre-wrap; }
-          </style>
-        </head>
-        <body>
-          <h2>${currentFileName}</h2>
-          ${lines.map(l => `<p>${l || '&nbsp;'}</p>`).join('')}
-        </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
+      exportPdfWithCpp("");
+    }
+
+    async function exportPdfWithCpp(filename) {
+      const status = document.getElementById('save-status');
+      status.innerText = 'Exporting PDF through C++...';
+      try {
+        const result = await cppApi('/api/pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, text: editor.value })
+        });
+        status.innerText = result.exported
+          ? `C++ PDF exported: ${result.filename}`
+          : (result.cancelled ? 'PDF export cancelled.' : 'C++ PDF export failed.');
+      } catch (error) {
+        status.innerText = 'C++ server unavailable. Start TextEditorServer.exe.';
+        console.error(error);
+      }
     }
 
     // Keyboard Shortcuts
