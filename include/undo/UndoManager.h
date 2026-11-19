@@ -5,6 +5,7 @@
 #include "../data_structures/Stack.h"
 
 using namespace std;
+// UndoManager keeps the undo and redo history using two circular stacks.
 
 // What kind of edit an Action describes.
 enum class ActionType
