@@ -29,7 +29,6 @@ private:
     void runReplaceOccurrence();
     void runUndo();
     void runRedo();
-    void runSuggestions();
     void runWordFrequency();
     void runExportPdf();
     void runInsertText();

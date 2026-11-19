@@ -512,18 +512,6 @@ int main()
         {
             sendResponse(client, "200 OK", "application/json", documentJson());
         }
-        else if (route == "/api/suggestions" && method == "GET")
-        {
-            std::vector<std::string> words = document.getWordSuggestions(queryValue(query, "prefix"));
-            std::string json = "[";
-            for (size_t i = 0; i < words.size(); ++i)
-            {
-                if (i) json += ",";
-                json += "\"" + jsonEscape(words[i]) + "\"";
-            }
-            json += "]";
-            sendResponse(client, "200 OK", "application/json", json);
-        }
         else if (route == "/api/frequency" && method == "GET")
         {
             int count = document.getWordFrequency(queryValue(query, "word"));

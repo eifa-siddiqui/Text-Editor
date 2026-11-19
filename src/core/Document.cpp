@@ -261,27 +261,6 @@ bool Document::replaceOccurrence(string pattern, string replacement,
     return true;
 }
 
-vector<string> Document::getWordSuggestions(string prefix)
-{
-    wordTrie.clear();
-
-    vector<string> allLines = lines.getAllLines();
-
-    for (const string& line : allLines)
-    {
-        stringstream ss(line);
-        string word;
-
-        while (ss >> word)
-        {
-            wordTrie.insertWord(word);
-        }
-    }
-
-    return wordTrie.getSuggestions(prefix);
-}
-
-
 // Get frequency of all words in document
 vector<pair<string, int>> Document::getWordFrequencies()
 {
@@ -356,7 +335,6 @@ void Document::newDocument()
 {
     lines.clear();
     history.clearHistory();
-    wordTrie.clear();
     wordFrequency.clear();
 }
 

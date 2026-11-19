@@ -5,7 +5,6 @@
 #include <utility>
 
 #include "../data_structures/LinkedList.h"
-#include "../data_structures/Trie.h"
 #include "../data_structures/HashTable.h"
 #include "../undo/UndoManager.h"
 #include "../file_handling/FileManager.h"
@@ -19,7 +18,6 @@ private:
     UndoManager      history;
     FileManager      fileManager;
     PDFExporter      pdfExporter;
-    Trie             wordTrie;
     HashTable        wordFrequency;
 
     void applyChanges(const std::vector<LineChange>& changes, bool useNewText);
@@ -51,7 +49,6 @@ public:
     int undoCount();
     int redoCount();
 
-    std::vector<std::string> getWordSuggestions(std::string prefix);
     std::vector<std::pair<std::string, int>> getWordFrequencies();
     int getWordFrequency(std::string word);
 

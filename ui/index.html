@@ -232,10 +232,6 @@
         <button onclick="cppDeleteText()" class="tool-button">Delete Text</button>
       </div>
       <div class="flex items-center gap-1">
-        <input id="tool-prefix" type="text" placeholder="Suggestion prefix" class="w-36 border border-slate-300 rounded px-2 py-1" />
-        <button onclick="cppSuggestions()" class="tool-button">Suggestions</button>
-      </div>
-      <div class="flex items-center gap-1">
         <input id="tool-word" type="text" placeholder="Word" class="w-24 border border-slate-300 rounded px-2 py-1" />
         <button onclick="cppFrequency()" class="tool-button">Frequency</button>
       </div>
@@ -255,7 +251,7 @@
     <!-- Main Clean White Typing Screen -->
     <div class="flex-1 relative overflow-hidden">
       <div id="highlight-layer" aria-hidden="true" class="absolute inset-0 p-3 pt-3 text-slate-800 editor-font overflow-hidden pointer-events-none"></div>
-      <textarea id="editor" spellcheck="false" placeholder="Start typing your text here..." 
+      <textarea id="editor" wrap="off" spellcheck="false" placeholder="Start typing your text here..." 
         oninput="handleEditorInput()" 
         onscroll="syncScroll()" 
         onkeyup="updateCursorPosition()" 
@@ -488,13 +484,6 @@
 
     function cppInsertText() { cppTextOperation('insert'); }
     function cppDeleteText() { cppTextOperation('delete'); }
-
-    async function cppSuggestions() {
-      const prefix = document.getElementById('tool-prefix').value;
-      const words = await cppApi('/api/suggestions?prefix=' + encodeURIComponent(prefix));
-      document.getElementById('cpp-tools-output').innerText =
-        words.length ? 'Suggestions: ' + words.join(', ') : 'No suggestions found';
-    }
 
     async function cppFrequency() {
       const word = document.getElementById('tool-word').value;
@@ -849,6 +838,12 @@
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        setTimeout(() => {
+          syncCppDocument();
+          syncDocumentFromTextarea();
+        }, 0);
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         performUndo();

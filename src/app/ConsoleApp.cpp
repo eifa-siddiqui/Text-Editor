@@ -21,7 +21,6 @@ void ConsoleApp::showMenu() const
     cout << "11. Replace Specific Occurrence\n";
     cout << "12. Undo\n";
     cout << "13. Redo\n";
-    cout << "14. Word Suggestions\n";
     cout << "15. Word Frequency\n";
     cout << "16. Export PDF\n";
     cout << "17. Insert Text at Character Position\n";
@@ -299,20 +298,6 @@ void ConsoleApp::runRedo()
         cout << "Nothing to redo!\n";
 }
 
-void ConsoleApp::runSuggestions()
-{
-    string prefix;
-    cout << "Enter prefix: ";
-    getline(cin, prefix);
-
-    vector<string> suggestions = document.getWordSuggestions(prefix);
-    if (suggestions.empty())
-        cout << "No suggestions found!\n";
-
-    for (const string& word : suggestions)
-        cout << word << '\n';
-}
-
 void ConsoleApp::runWordFrequency()
 {
     string word;
@@ -401,7 +386,6 @@ void ConsoleApp::handleChoice(int choice)
     case 11: runReplaceOccurrence(); break;
     case 12: runUndo(); break;
     case 13: runRedo(); break;
-    case 14: runSuggestions(); break;
     case 15: runWordFrequency(); break;
     case 16: runExportPdf(); break;
     case 17: runInsertText(); break;

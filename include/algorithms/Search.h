@@ -32,7 +32,7 @@ struct SearchStats
 class PatternMatcher
 {
 public:
-    virtual ~PatternMatcher() {}
+    virtual ~PatternMatcher();
     virtual int findNext(const string& text, int from) const = 0;
     virtual int findNext(const string& text, int from, SearchStats& stats) const = 0;
     virtual int patternLength() const = 0;
@@ -49,7 +49,7 @@ public:
     explicit KMPMatcher(const string& pat);
     int findNext(const string& text, int from) const override;
     int findNext(const string& text, int from, SearchStats& stats) const override;
-    int patternLength() const override { return (int)pattern.size(); }
+    int patternLength() const override;
 };
 
 // Boyer-Moore with BOTH the bad-character and the (strong) good-suffix rule.

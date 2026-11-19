@@ -4,6 +4,15 @@
 
 using namespace std;
 
+PatternMatcher::~PatternMatcher()
+{
+}
+
+int KMPMatcher::patternLength() const
+{
+    return (int)pattern.size();
+}
+
 // ===========================================================================
 // Helpers
 // ===========================================================================
