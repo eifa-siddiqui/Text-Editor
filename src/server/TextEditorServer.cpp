@@ -315,6 +315,7 @@ static std::string sendResponse(SOCKET client, const std::string& status,
              << "Cache-Control: no-store\r\n"
              << "Access-Control-Allow-Origin: *\r\n"
              << "Access-Control-Allow-Headers: Content-Type\r\n"
+             << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
              << "Connection: close\r\n\r\n"
              << body;
     std::string bytes = response.str();

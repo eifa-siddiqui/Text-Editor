@@ -305,7 +305,7 @@
         updateUndoButtons(result.undoCount, result.redoCount);
         updateSaveButton(result.dirty);
         updateCppFilename(result.filename);
-        updateLineNumbers(result.lines);
+        updateLineNumbers();
         return result;
       }).catch(error => console.error('C++ document sync failed:', error));
     }
@@ -360,24 +360,14 @@
     }
 
     // Synchronize gutter line numbers
-    function updateLineNumbers(lineCount) {
-      if (Number.isInteger(lineCount) && lineCount >= 1) {
-        let gutterHTML = '';
-        for (let i = 1; i <= lineCount; i++) {
-          gutterHTML += `<div style="height:22px;line-height:22px">${i}</div>`;
-        }
-        gutter.innerHTML = gutterHTML;
-        document.getElementById('stat-lines-total').innerText = lineCount;
-        return;
+    function updateLineNumbers() {
+      const lineCount = editor.value.split('\n').length;
+      let gutterHTML = '';
+      for (let i = 1; i <= lineCount; i++) {
+        gutterHTML += `<div style="height:22px;line-height:22px">${i}</div>`;
       }
-      cppApi('/api/stats').then(result => {
-        let gutterHTML = '';
-        for (let i = 1; i <= result.lines; i++) {
-          gutterHTML += `<div style="height:22px;line-height:22px">${i}</div>`;
-        }
-        gutter.innerHTML = gutterHTML;
-        document.getElementById('stat-lines-total').innerText = result.lines;
-      }).catch(error => console.error('C++ line numbers failed:', error));
+      gutter.innerHTML = gutterHTML;
+      document.getElementById('stat-lines-total').innerText = lineCount;
     }
 
     // Keep line numbers scrolled in sync with the textarea
@@ -389,7 +379,6 @@
 
     function handleEditorInput() {
       syncDocumentFromTextarea();
-      updateStats();
       updateSaveButton();
       clearTimeout(syncTimer);
       syncTimer = setTimeout(syncCppDocument, 150);
@@ -416,14 +405,14 @@
 
     // Document Statistics
     function updateStats() {
-      cppApi('/api/stats').then(result => {
-        document.getElementById('stat-lines-total').innerText = result.lines;
-        document.getElementById('stat-chars').innerText = result.characters;
-      }).catch(error => console.error('C++ stats failed:', error));
-      cppApi('/api/frequencies').then(result => {
-        const words = result.reduce((total, item) => total + item.count, 0);
-        document.getElementById('stat-words').innerText = words;
-      }).catch(error => console.error('C++ word count failed:', error));
+      const text = editor.value;
+      const lines = text.split('\n');
+      const characters = lines.reduce((total, line) => total + line.length, 0);
+      const words = (text.match(/\S+/g) || []).length;
+
+      document.getElementById('stat-lines-total').innerText = lines.length;
+      document.getElementById('stat-words').innerText = words;
+      document.getElementById('stat-chars').innerText = characters;
     }
 
     function toggleCppTools() {
@@ -838,12 +827,6 @@
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        setTimeout(() => {
-          syncCppDocument();
-          syncDocumentFromTextarea();
-        }, 0);
-      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         performUndo();
